@@ -1,8 +1,14 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
+import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
+import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 const MERGE_ENDPOINT = "http://localhost:8080/api/pdf/merge";
 const SPLIT_ENDPOINT = "http://localhost:8080/api/pdf/split";
+const THUMBNAIL_WIDTH = 180;
+
+GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
 type UploadStatus = "idle" | "uploading" | "success" | "error";
 type ActiveTool = "merge" | "split";
@@ -62,6 +68,140 @@ function isPDF(file: File) {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 }
 
+type PdfPageThumbnailProps = {
+  disabled: boolean;
+  isSelected: boolean;
+  onToggle: () => void;
+  pageNumber: number;
+  pdfDocument: PDFDocumentProxy;
+};
+
+function PdfPageThumbnail({
+  disabled,
+  isSelected,
+  onToggle,
+  pageNumber,
+  pdfDocument,
+}: PdfPageThumbnailProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isRendering, setIsRendering] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    let isActive = true;
+    let renderTask: RenderTask | null = null;
+
+    const renderPage = async () => {
+      const canvas = canvasRef.current;
+
+      if (!canvas) {
+        return;
+      }
+
+      setIsRendering(true);
+      setHasError(false);
+
+      try {
+        const page = await pdfDocument.getPage(pageNumber);
+        const baseViewport = page.getViewport({ scale: 1 });
+        const scale = THUMBNAIL_WIDTH / baseViewport.width;
+        const viewport = page.getViewport({ scale });
+
+        if (!isActive) {
+          return;
+        }
+
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        renderTask = page.render({
+          canvas,
+          viewport,
+        });
+
+        await renderTask.promise;
+
+        if (isActive) {
+          setIsRendering(false);
+        }
+      } catch (error) {
+        if (
+          !isActive ||
+          (error instanceof Error && error.name === "RenderingCancelledException")
+        ) {
+          return;
+        }
+
+        setHasError(true);
+        setIsRendering(false);
+      }
+    };
+
+    void renderPage();
+
+    return () => {
+      isActive = false;
+      renderTask?.cancel();
+    };
+  }, [pageNumber, pdfDocument]);
+
+  return (
+    <button
+      className={`group relative flex min-h-64 flex-col rounded-2xl border bg-white p-2 text-left shadow-sm transition ${
+        isSelected
+          ? "border-cyan-500 shadow-lg shadow-cyan-600/15 ring-4 ring-cyan-100"
+          : "border-slate-200 hover:border-cyan-300 hover:shadow-md"
+      } disabled:cursor-not-allowed disabled:opacity-70`}
+      type="button"
+      onClick={onToggle}
+      disabled={disabled}
+      aria-pressed={isSelected}
+      aria-label={`${isSelected ? "Deselect" : "Select"} page ${pageNumber}`}
+    >
+      <div className="flex flex-1 items-center justify-center overflow-hidden rounded-xl bg-slate-100">
+        {hasError ? (
+          <span className="px-3 text-center text-xs font-medium text-rose-600">
+            Preview unavailable
+          </span>
+        ) : null}
+        <canvas
+          ref={canvasRef}
+          className={`max-h-full max-w-full bg-white transition ${
+            isRendering || hasError ? "hidden" : "block"
+          }`}
+        />
+        {isRendering && !hasError ? (
+          <span className="text-xs font-medium text-slate-400">Rendering</span>
+        ) : null}
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-slate-900">Page {pageNumber}</span>
+        <span
+          className={`flex h-6 w-6 items-center justify-center rounded-full border transition ${
+            isSelected
+              ? "border-cyan-600 bg-cyan-600 text-white"
+              : "border-slate-300 text-transparent group-hover:border-cyan-400"
+          }`}
+          aria-hidden="true"
+        >
+          {isSelected ? (
+            <svg
+              className="h-3.5 w-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2.2"
+              viewBox="0 0 24 24"
+            >
+              <path d="m5 12 4 4L19 6" />
+            </svg>
+          ) : null}
+        </span>
+      </div>
+    </button>
+  );
+}
+
 function App() {
   const [activeTool, setActiveTool] = useState<ActiveTool>("merge");
 
@@ -72,7 +212,9 @@ function App() {
   const mergeInputRef = useRef<HTMLInputElement>(null);
 
   const [splitFile, setSplitFile] = useState<File | null>(null);
-  const [splitPages, setSplitPages] = useState("");
+  const [splitDocument, setSplitDocument] = useState<PDFDocumentProxy | null>(null);
+  const [selectedSplitPages, setSelectedSplitPages] = useState<number[]>([]);
+  const [isSplitPreviewLoading, setIsSplitPreviewLoading] = useState(false);
   const [isSplitDragging, setIsSplitDragging] = useState(false);
   const [splitStatus, setSplitStatus] = useState<UploadStatus>("idle");
   const [splitMessage, setSplitMessage] = useState("");
@@ -82,6 +224,67 @@ function App() {
     () => mergeFiles.reduce((sum, file) => sum + file.size, 0),
     [mergeFiles],
   );
+
+  const selectedPagesText = selectedSplitPages.join(",");
+
+  useEffect(() => {
+    let isActive = true;
+    let loadedDocument: PDFDocumentProxy | null = null;
+
+    if (!splitFile) {
+      setSplitDocument(null);
+      setSelectedSplitPages([]);
+      setIsSplitPreviewLoading(false);
+      return;
+    }
+
+    setSplitDocument(null);
+    setSelectedSplitPages([]);
+    setIsSplitPreviewLoading(true);
+    setSplitStatus("idle");
+    setSplitMessage("Preparing page previews...");
+
+    const loadDocument = async () => {
+      try {
+        const fileBuffer = await splitFile.arrayBuffer();
+        const document = await getDocument({
+          data: new Uint8Array(fileBuffer),
+        }).promise;
+        loadedDocument = document;
+
+        if (!isActive) {
+          await document.loadingTask.destroy();
+          return;
+        }
+
+        setSplitDocument(document);
+        setIsSplitPreviewLoading(false);
+        setSplitMessage("");
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+
+        setSplitDocument(null);
+        setIsSplitPreviewLoading(false);
+        setSplitStatus("error");
+        setSplitMessage(
+          error instanceof Error
+            ? error.message
+            : "Could not prepare page previews for this PDF.",
+        );
+      }
+    };
+
+    void loadDocument();
+
+    return () => {
+      isActive = false;
+      if (loadedDocument) {
+        void loadedDocument.loadingTask.destroy();
+      }
+    };
+  }, [splitFile]);
 
   const addMergeFiles = (incomingFiles: FileList | File[]) => {
     const pdfFiles = Array.from(incomingFiles).filter(isPDF);
@@ -180,6 +383,7 @@ function App() {
     }
 
     setSplitFile(pdfFile);
+    setSelectedSplitPages([]);
     setSplitStatus("idle");
     setSplitMessage("");
   };
@@ -199,19 +403,26 @@ function App() {
 
   const clearSplitFile = () => {
     setSplitFile(null);
-    setSplitPages("");
+    setSplitDocument(null);
+    setSelectedSplitPages([]);
+    setIsSplitPreviewLoading(false);
     setSplitStatus("idle");
     setSplitMessage("");
   };
 
   const handleSplit = async () => {
-    if (!splitFile || !splitPages.trim() || splitStatus === "uploading") {
+    if (
+      !splitFile ||
+      selectedSplitPages.length === 0 ||
+      isSplitPreviewLoading ||
+      splitStatus === "uploading"
+    ) {
       return;
     }
 
     const formData = new FormData();
     formData.append("file", splitFile);
-    formData.append("pages", splitPages.trim());
+    formData.append("pages", selectedPagesText);
 
     setSplitStatus("uploading");
     setSplitMessage("Uploading PDF for split...");
@@ -242,6 +453,39 @@ function App() {
     }
   };
 
+  const toggleSplitPage = (pageNumber: number) => {
+    setSelectedSplitPages((currentPages) => {
+      if (currentPages.includes(pageNumber)) {
+        return currentPages.filter((page) => page !== pageNumber);
+      }
+
+      return [...currentPages, pageNumber].sort((firstPage, secondPage) => firstPage - secondPage);
+    });
+
+    if (splitStatus !== "uploading") {
+      setSplitStatus("idle");
+      setSplitMessage("");
+    }
+  };
+
+  const selectAllSplitPages = () => {
+    if (!splitDocument) {
+      return;
+    }
+
+    setSelectedSplitPages(
+      Array.from({ length: splitDocument.numPages }, (_, index) => index + 1),
+    );
+    setSplitStatus("idle");
+    setSplitMessage("");
+  };
+
+  const clearSelectedSplitPages = () => {
+    setSelectedSplitPages([]);
+    setSplitStatus("idle");
+    setSplitMessage("");
+  };
+
   const toolCopy =
     activeTool === "merge"
       ? {
@@ -252,11 +496,14 @@ function App() {
       : {
           title: "Split one PDF into the pages you need.",
           description:
-            "Upload a PDF, enter single pages or ranges, and download the result returned by the local split service.",
+            "Upload a PDF, choose pages from visual thumbnails, and download the result returned by the local split service.",
         };
 
   const isSplitReady =
-    Boolean(splitFile) && splitPages.trim().length > 0 && splitStatus !== "uploading";
+    Boolean(splitFile) &&
+    selectedSplitPages.length > 0 &&
+    !isSplitPreviewLoading &&
+    splitStatus !== "uploading";
 
   const tabClass = (tool: ActiveTool) =>
     `flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${
@@ -514,18 +761,45 @@ function App() {
                         Split settings
                       </h2>
                       <p className="mt-1 text-sm text-slate-500">
-                        Select one PDF and enter pages as numbers or ranges.
+                        {splitDocument
+                          ? `${selectedSplitPages.length} of ${splitDocument.numPages} pages selected`
+                          : "Select one PDF to preview its pages."}
                       </p>
                     </div>
 
-                    <button
-                      className="self-start rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
-                      type="button"
-                      onClick={clearSplitFile}
-                      disabled={!splitFile || splitStatus === "uploading"}
-                    >
-                      Clear
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      {splitDocument ? (
+                        <>
+                          <button
+                            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            type="button"
+                            onClick={selectAllSplitPages}
+                            disabled={splitStatus === "uploading"}
+                          >
+                            Select all
+                          </button>
+                          <button
+                            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            type="button"
+                            onClick={clearSelectedSplitPages}
+                            disabled={
+                              selectedSplitPages.length === 0 ||
+                              splitStatus === "uploading"
+                            }
+                          >
+                            Clear selection
+                          </button>
+                        </>
+                      ) : null}
+                      <button
+                        className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        type="button"
+                        onClick={clearSplitFile}
+                        disabled={!splitFile || splitStatus === "uploading"}
+                      >
+                        Clear
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -547,29 +821,40 @@ function App() {
                 </div>
 
                 {splitFile ? (
-                  <div className="border-t border-slate-200 p-5">
-                    <label
-                      className="text-sm font-semibold text-slate-800"
-                      htmlFor="split-pages"
-                    >
-                      Pages to split
-                    </label>
-                    <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-                      <input
-                        className="min-h-11 flex-1 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-50"
-                        id="split-pages"
-                        type="text"
-                        value={splitPages}
-                        placeholder="1, 2-5, 7"
-                        onChange={(event) => {
-                          setSplitPages(event.target.value);
-                          if (splitStatus !== "uploading") {
-                            setSplitStatus("idle");
-                            setSplitMessage("");
-                          }
-                        }}
-                        disabled={splitStatus === "uploading"}
-                      />
+                  <div className="border-t border-slate-200 bg-slate-50/60 p-4 sm:p-5">
+                    {isSplitPreviewLoading ? (
+                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-sm font-medium text-slate-500">
+                        Preparing page previews...
+                      </div>
+                    ) : null}
+
+                    {splitDocument ? (
+                      <div className="grid max-h-[34rem] grid-cols-2 gap-4 overflow-y-auto pr-1 sm:grid-cols-3 xl:grid-cols-4">
+                        {Array.from(
+                          { length: splitDocument.numPages },
+                          (_, index) => index + 1,
+                        ).map((pageNumber) => (
+                          <PdfPageThumbnail
+                            key={`${splitFile.name}-${splitFile.lastModified}-${pageNumber}`}
+                            disabled={splitStatus === "uploading"}
+                            isSelected={selectedSplitPages.includes(pageNumber)}
+                            onToggle={() => toggleSplitPage(pageNumber)}
+                            pageNumber={pageNumber}
+                            pdfDocument={splitDocument}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900">
+                          Selected pages
+                        </p>
+                        <p className="mt-1 truncate text-sm text-slate-500">
+                          {selectedPagesText || "No pages selected"}
+                        </p>
+                      </div>
                       <button
                         className="min-h-11 rounded-full bg-cyan-600 px-5 text-sm font-semibold text-white shadow-lg shadow-cyan-600/20 transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                         type="button"

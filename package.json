@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "pdfjs-dist": "^6.0.227",
     "react": "latest",
     "react-dom": "latest"
   },

@@ -15,7 +15,8 @@ The current app supports:
 - Sending selected files to `http://localhost:8080/api/pdf/merge`.
 - Downloading the merged PDF returned by the server.
 - Selecting one PDF for splitting.
-- Entering page selections such as `1, 2-5, 7`.
+- Previewing split PDF pages as clickable thumbnails.
+- Selecting and deselecting pages visually before splitting.
 - Sending the split request to `http://localhost:8080/api/pdf/split`.
 - Downloading the split file returned by the server.
 
@@ -73,7 +74,7 @@ Vite will print the local client URL. By default it is usually:
 http://localhost:5173
 ```
 
-Open that URL in your browser. Use Merge PDF for multiple files, or Split PDF for one file and a page selection.
+Open that URL in your browser. Use Merge PDF for multiple files, or Split PDF for one file and visual page selection.
 
 ## Available Commands
 
@@ -127,7 +128,7 @@ http://localhost:8080/api/pdf/split
 The request body is `multipart/form-data` with these fields:
 
 - `file`: one PDF file
-- `pages`: a page selection expression, such as `1, 2-5, 7`
+- `pages`: selected page numbers joined as a comma-separated string, such as `1,3,5`
 
 The server is expected to return a downloadable PDF or ZIP file. If the server does not provide a filename, the client downloads the result as `split.pdf`.
 
@@ -138,7 +139,7 @@ If a PDF action fails, check these first:
 - Make sure the server is running on port `8080`.
 - Make sure the client is running on `http://localhost:5173` or `http://localhost:3000`, because those origins are allowed by the server CORS setup.
 - Select at least two PDF files for merging.
-- Select one PDF file and enter pages for splitting.
+- Select one PDF file and choose page thumbnails for splitting.
 - Confirm the files have a `.pdf` extension and valid PDF file content.
 - If dependencies are missing, run `npm install` in the client and `go mod tidy` in the server.
 
