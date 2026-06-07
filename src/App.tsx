@@ -7,12 +7,13 @@ import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 const MERGE_ENDPOINT = "http://localhost:8080/api/pdf/merge";
 const SPLIT_ENDPOINT = "http://localhost:8080/api/pdf/split";
+const COMPRESS_ENDPOINT = "http://localhost:8080/api/pdf/compress";
 const THUMBNAIL_WIDTH = 180;
 
 GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
 type UploadStatus = "idle" | "uploading" | "success" | "error";
-type ActiveTool = "merge" | "split";
+type ActiveTool = "merge" | "split" | "compress";
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) {
@@ -220,6 +221,12 @@ function App() {
   const [splitStatus, setSplitStatus] = useState<UploadStatus>("idle");
   const [splitMessage, setSplitMessage] = useState("");
   const splitInputRef = useRef<HTMLInputElement>(null);
+
+  const [compressFile, setCompressFile] = useState<File | null>(null);
+  const [isCompressDragging, setIsCompressDragging] = useState(false);
+  const [compressStatus, setCompressStatus] = useState<UploadStatus>("idle");
+  const [compressMessage, setCompressMessage] = useState("");
+  const compressInputRef = useRef<HTMLInputElement>(null);
 
   const totalMergeSize = useMemo(
     () => mergeFiles.reduce((sum, file) => sum + file.size, 0),
@@ -487,6 +494,84 @@ function App() {
     setSplitMessage("");
   };
 
+  const addCompressFile = (incomingFiles: FileList | File[]) => {
+    const pdfFile = Array.from(incomingFiles).find(isPDF);
+
+    if (!pdfFile) {
+      setCompressStatus("error");
+      setCompressMessage("Choose one PDF file to compress.");
+      return;
+    }
+
+    setCompressFile(pdfFile);
+    setCompressStatus("idle");
+    setCompressMessage("");
+  };
+
+  const handleCompressFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      addCompressFile(event.target.files);
+      event.target.value = "";
+    }
+  };
+
+  const handleCompressDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsCompressDragging(false);
+
+    if (compressStatus === "uploading") {
+      return;
+    }
+
+    addCompressFile(event.dataTransfer.files);
+  };
+
+  const clearCompressFile = () => {
+    setCompressFile(null);
+    setCompressStatus("idle");
+    setCompressMessage("");
+  };
+
+  const handleCompress = async () => {
+    if (!compressFile || compressStatus === "uploading") {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", compressFile);
+
+    setCompressStatus("uploading");
+    setCompressMessage("Compressing PDF...");
+
+    try {
+      const response = await fetch(COMPRESS_ENDPOINT, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          await getResponseError(
+            response,
+            `Compress failed with status ${response.status}`,
+          ),
+        );
+      }
+
+      await downloadResponseFile(response, "compressed.pdf");
+
+      setCompressStatus("success");
+      setCompressMessage("Compressed PDF downloaded.");
+    } catch (error) {
+      setCompressStatus("error");
+      setCompressMessage(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while compressing the file.",
+      );
+    }
+  };
+
   const toolCopy =
     activeTool === "merge"
       ? {
@@ -494,11 +579,17 @@ function App() {
           description:
             "Drop several PDFs, review the queue, and let FileConvy return one clean document.",
         }
-      : {
-          title: "Split only the pages you need",
-          description:
-            "Preview every page, select the exact range, and download a focused file.",
-        };
+      : activeTool === "split"
+        ? {
+            title: "Split only the pages you need",
+            description:
+              "Preview every page, select the exact range, and download a focused file.",
+          }
+        : {
+            title: "Compress PDFs into lighter files",
+            description:
+              "Upload one PDF, send it to the compression service, and get a smaller copy automatically.",
+          };
 
   const isSplitReady =
     Boolean(splitFile) &&
@@ -507,7 +598,7 @@ function App() {
     splitStatus !== "uploading";
 
   const tabClass = (tool: ActiveTool) =>
-    `flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
+    `min-w-0 flex-1 rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
       activeTool === tool
         ? "bg-[#192126] text-white shadow-sm"
         : "text-slate-500 hover:bg-white hover:text-slate-900"
@@ -557,6 +648,31 @@ function App() {
     >
       <path d="M18 6 6 18" />
       <path d="m6 6 12 12" />
+    </svg>
+  );
+
+  const renderSpinnerIcon = () => (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4 animate-spin"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
+      <path
+        className="opacity-90"
+        d="M4 12a8 8 0 0 1 8-8"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="4"
+      />
     </svg>
   );
 
@@ -617,6 +733,13 @@ function App() {
             onClick={() => setActiveTool("split")}
           >
             Split PDF
+          </button>
+          <button
+            className={tabClass("compress")}
+            type="button"
+            onClick={() => setActiveTool("compress")}
+          >
+            Compress
           </button>
         </div>
       </div>
@@ -716,7 +839,7 @@ function App() {
               ) : null}
             </div>
           </>
-        ) : (
+        ) : activeTool === "split" ? (
           <>
             <div
               className={dropZoneClass(isSplitDragging)}
@@ -871,6 +994,122 @@ function App() {
               ) : null}
             </div>
           </>
+        ) : (
+          <>
+            <div
+              className={dropZoneClass(isCompressDragging)}
+              onClick={() => {
+                if (compressStatus !== "uploading") {
+                  compressInputRef.current?.click();
+                }
+              }}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setIsCompressDragging(true);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={() => setIsCompressDragging(false)}
+              onDrop={handleCompressDrop}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  if (compressStatus !== "uploading") {
+                    compressInputRef.current?.click();
+                  }
+                }
+              }}
+            >
+              <input
+                ref={compressInputRef}
+                className="sr-only"
+                type="file"
+                accept="application/pdf,.pdf"
+                onChange={handleCompressFileChange}
+                disabled={compressStatus === "uploading"}
+              />
+              {renderUploadIcon()}
+              <h3 className="mt-6 text-2xl font-semibold">
+                Drag and drop one PDF here
+              </h3>
+              <p className="mt-2 text-sm text-slate-500">
+                or click to browse and replace the selected file
+              </p>
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold">Compression queue</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {compressFile
+                      ? `${compressFile.name} - ${formatFileSize(compressFile.size)}`
+                      : "Select one PDF to optimize."}
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    type="button"
+                    onClick={clearCompressFile}
+                    disabled={!compressFile || compressStatus === "uploading"}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#007f8a] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-cyan-700/20 transition hover:bg-[#006b73] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                    type="button"
+                    onClick={handleCompress}
+                    disabled={!compressFile || compressStatus === "uploading"}
+                  >
+                    {compressStatus === "uploading" ? (
+                      <>
+                        {renderSpinnerIcon()}
+                        Compressing...
+                      </>
+                    ) : (
+                      "Compress"
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3">
+                {compressFile ? (
+                  <ul>
+                    {renderFileRow(
+                      compressFile,
+                      clearCompressFile,
+                      `Remove ${compressFile.name}`,
+                      compressStatus === "uploading",
+                    )}
+                  </ul>
+                ) : (
+                  <div className="rounded-lg bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                    No PDF selected yet.
+                  </div>
+                )}
+              </div>
+
+              {compressStatus === "uploading" ? (
+                <div className="border-t border-slate-200 bg-[#f7faf9] px-5 py-5">
+                  <div className="flex items-center gap-3 rounded-lg border border-cyan-100 bg-white px-4 py-4 text-sm font-medium text-slate-700">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-50 text-[#007f8a]">
+                      {renderSpinnerIcon()}
+                    </span>
+                    Optimizing your PDF and preparing the download...
+                  </div>
+                </div>
+              ) : null}
+
+              {compressMessage ? (
+                <p className={messageClass(compressStatus)} role="status">
+                  {compressMessage}
+                </p>
+              ) : null}
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -919,7 +1158,7 @@ function App() {
               FileConvy
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-700 sm:text-xl">
-              A polished workspace for merging messy PDF batches and splitting long documents into exactly the pages you need.
+              A polished workspace for merging messy PDF batches, splitting long documents, and compressing heavy files into lighter downloads.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
@@ -938,7 +1177,7 @@ function App() {
             <dl className="mt-10 grid max-w-2xl grid-cols-3 gap-3">
               <div className="border-l border-slate-300 pl-4">
                 <dt className="text-xs font-medium text-slate-500">Modes</dt>
-                <dd className="mt-1 text-2xl font-semibold text-slate-950">2</dd>
+                <dd className="mt-1 text-2xl font-semibold text-slate-950">3</dd>
               </div>
               <div className="border-l border-slate-300 pl-4">
                 <dt className="text-xs font-medium text-slate-500">Preview</dt>
@@ -970,7 +1209,7 @@ function App() {
           <div className="grid gap-4 sm:grid-cols-3">
             {[
               ["Drop", "Add PDFs directly into the active tool."],
-              ["Review", "Check file order, size, and selected pages."],
+              ["Review", "Check file order, size, selected pages, or compression queue."],
               ["Download", "Run the local service and receive the finished file."],
             ].map(([title, description]) => (
               <article
