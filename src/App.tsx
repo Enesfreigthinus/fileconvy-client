@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
+import appIcon from "./assets/fileConvy_favicon.png";
 import heroImage from "./assets/fileconvy-hero.png";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
@@ -700,10 +701,10 @@ function App() {
     splitStatus !== "uploading";
 
   const tabClass = (tool: ActiveTool) =>
-    `min-w-0 flex-1 rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
+    `flex min-h-16 items-center justify-center rounded-lg border px-4 text-base font-semibold transition ${
       activeTool === tool
-        ? "bg-[#192126] text-white shadow-sm"
-        : "text-slate-500 hover:bg-white hover:text-slate-900"
+        ? "border-[#192126] bg-[#192126] text-white shadow-lg shadow-slate-300"
+        : "border-slate-200 bg-white text-slate-600 shadow-sm hover:border-cyan-300 hover:text-slate-950 hover:shadow-md"
     }`;
 
   const dropZoneClass = (isDragging: boolean) =>
@@ -810,7 +811,7 @@ function App() {
 
   const renderToolPanel = () => (
     <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-[0_24px_80px_rgba(25,33,38,0.12)] sm:p-4">
-      <div className="grid gap-4 border-b border-slate-200 pb-4 lg:grid-cols-[1fr_auto] lg:items-center">
+      <div className="border-b border-slate-200 pb-4">
         <div>
           <p className="text-sm font-semibold text-cyan-700">
             Live workspace
@@ -821,36 +822,6 @@ function App() {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
             {toolCopy.description}
           </p>
-        </div>
-        <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 sm:flex">
-          <button
-            className={tabClass("merge")}
-            type="button"
-            onClick={() => setActiveTool("merge")}
-          >
-            Merge PDF
-          </button>
-          <button
-            className={tabClass("split")}
-            type="button"
-            onClick={() => setActiveTool("split")}
-          >
-            Split PDF
-          </button>
-          <button
-            className={tabClass("compress")}
-            type="button"
-            onClick={() => setActiveTool("compress")}
-          >
-            Compress
-          </button>
-          <button
-            className={tabClass("convert")}
-            type="button"
-            onClick={() => setActiveTool("convert")}
-          >
-            Convert
-          </button>
         </div>
       </div>
 
@@ -1359,10 +1330,8 @@ function App() {
         <div className="absolute inset-0 -z-10 bg-white/72" />
 
         <header className="mx-auto flex max-w-7xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8">
-          <a className="flex items-center gap-3 text-sm font-bold text-slate-950" href="#">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#192126] text-white">
-              FC
-            </span>
+          <a className="flex items-center gap-4 text-base font-bold text-slate-950" href="#">
+            <img className="h-14 w-14 rounded-xl" src={appIcon} alt="FileConvy" />
             FileConvy
           </a>
           <nav className="hidden items-center gap-6 text-sm font-medium text-slate-600 sm:flex">
@@ -1392,39 +1361,46 @@ function App() {
             <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-700 sm:text-xl">
               A polished workspace for merging PDF batches, splitting long documents, compressing heavy files, and converting images or Office documents into PDFs.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a
-                className="inline-flex min-h-12 items-center justify-center rounded-lg bg-[#007f8a] px-6 text-sm font-semibold text-white shadow-lg shadow-cyan-700/20 transition hover:bg-[#006b73]"
-                href="#workspace"
-              >
-                Open workspace
-              </a>
-              <a
-                className="inline-flex min-h-12 items-center justify-center rounded-lg border border-slate-300 bg-white/80 px-6 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-white"
-                href="#workflow"
-              >
-                See workflow
-              </a>
-            </div>
-            <dl className="mt-10 grid max-w-2xl grid-cols-3 gap-3">
-              <div className="border-l border-slate-300 pl-4">
-                <dt className="text-xs font-medium text-slate-500">Modes</dt>
-                <dd className="mt-1 text-2xl font-semibold text-slate-950">4</dd>
-              </div>
-              <div className="border-l border-slate-300 pl-4">
-                <dt className="text-xs font-medium text-slate-500">Inputs</dt>
-                <dd className="mt-1 text-2xl font-semibold text-slate-950">6</dd>
-              </div>
-              <div className="border-l border-slate-300 pl-4">
-                <dt className="text-xs font-medium text-slate-500">Output</dt>
-                <dd className="mt-1 text-2xl font-semibold text-slate-950">PDF</dd>
-              </div>
-            </dl>
           </div>
         </div>
       </section>
 
-      <section id="workspace" className="px-4 py-12 sm:px-6 lg:px-8">
+      <section className="px-4 py-10 sm:px-6 lg:px-8" aria-label="PDF tools">
+        <div className="mx-auto max-w-5xl rounded-lg border border-slate-200 bg-white/90 p-3 shadow-[0_18px_60px_rgba(25,33,38,0.10)] backdrop-blur">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <button
+              className={tabClass("merge")}
+              type="button"
+              onClick={() => setActiveTool("merge")}
+            >
+              Merge
+            </button>
+            <button
+              className={tabClass("split")}
+              type="button"
+              onClick={() => setActiveTool("split")}
+            >
+              Split
+            </button>
+            <button
+              className={tabClass("compress")}
+              type="button"
+              onClick={() => setActiveTool("compress")}
+            >
+              Compress
+            </button>
+            <button
+              className={tabClass("convert")}
+              type="button"
+              onClick={() => setActiveTool("convert")}
+            >
+              Convert
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="workspace" className="px-4 pb-12 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl">
           {renderToolPanel()}
         </div>
