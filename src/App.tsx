@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
+import heroImage from "./assets/fileconvy-hero.png";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 const MERGE_ENDPOINT = "http://localhost:8080/api/pdf/merge";
@@ -146,7 +147,7 @@ function PdfPageThumbnail({
 
   return (
     <button
-      className={`group relative flex min-h-64 flex-col rounded-2xl border bg-white p-2 text-left shadow-sm transition ${
+      className={`group relative flex min-h-64 flex-col rounded-lg border bg-white p-2 text-left shadow-sm transition ${
         isSelected
           ? "border-cyan-500 shadow-lg shadow-cyan-600/15 ring-4 ring-cyan-100"
           : "border-slate-200 hover:border-cyan-300 hover:shadow-md"
@@ -157,7 +158,7 @@ function PdfPageThumbnail({
       aria-pressed={isSelected}
       aria-label={`${isSelected ? "Deselect" : "Select"} page ${pageNumber}`}
     >
-      <div className="flex flex-1 items-center justify-center overflow-hidden rounded-xl bg-slate-100">
+      <div className="flex flex-1 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
         {hasError ? (
           <span className="px-3 text-center text-xs font-medium text-rose-600">
             Preview unavailable
@@ -489,14 +490,14 @@ function App() {
   const toolCopy =
     activeTool === "merge"
       ? {
-          title: "Merge PDFs without the clutter.",
+          title: "Merge PDFs without the clutter",
           description:
-            "Drop your PDFs, review the queue, and send them to the local merge service. The merged file downloads automatically when it is ready.",
+            "Drop several PDFs, review the queue, and let FileConvy return one clean document.",
         }
       : {
-          title: "Split one PDF into the pages you need.",
+          title: "Split only the pages you need",
           description:
-            "Upload a PDF, choose pages from visual thumbnails, and download the result returned by the local split service.",
+            "Preview every page, select the exact range, and download a focused file.",
         };
 
   const isSplitReady =
@@ -506,17 +507,17 @@ function App() {
     splitStatus !== "uploading";
 
   const tabClass = (tool: ActiveTool) =>
-    `flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${
+    `flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
       activeTool === tool
-        ? "bg-slate-950 text-white shadow-sm"
+        ? "bg-[#192126] text-white shadow-sm"
         : "text-slate-500 hover:bg-white hover:text-slate-900"
     }`;
 
   const dropZoneClass = (isDragging: boolean) =>
-    `flex min-h-[260px] cursor-pointer flex-col items-center justify-center rounded-[22px] border border-dashed px-6 py-10 text-center transition ${
+    `flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-6 py-10 text-center transition ${
       isDragging
         ? "border-cyan-500 bg-cyan-50"
-        : "border-slate-300 bg-slate-50 hover:border-cyan-500 hover:bg-cyan-50/60"
+        : "border-slate-300 bg-[#f7faf9] hover:border-cyan-500 hover:bg-cyan-50/70"
     }`;
 
   const messageClass = (status: UploadStatus) =>
@@ -525,7 +526,7 @@ function App() {
     }`;
 
   const renderUploadIcon = () => (
-    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-300">
+    <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-[#192126] text-white shadow-lg shadow-slate-300">
       <svg
         aria-hidden="true"
         className="h-8 w-8"
@@ -566,10 +567,10 @@ function App() {
     disabled: boolean,
   ) => (
     <li
-      className="flex items-center gap-3 rounded-2xl px-3 py-3 transition hover:bg-slate-50"
+      className="flex items-center gap-3 rounded-lg px-3 py-3 transition hover:bg-slate-50"
       key={`${file.name}-${file.size}-${file.lastModified}`}
     >
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-sm font-bold text-rose-600">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#fff0ed] text-sm font-bold text-[#d94b3f]">
         PDF
       </div>
       <div className="min-w-0 flex-1">
@@ -588,293 +589,401 @@ function App() {
     </li>
   );
 
-  return (
-    <main className="min-h-screen bg-[#f7f8fb] px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
-      <section className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl content-center gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
-        <div className="max-w-xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">
-            FileConvy
+  const renderToolPanel = () => (
+    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-[0_24px_80px_rgba(25,33,38,0.12)] sm:p-4">
+      <div className="grid gap-4 border-b border-slate-200 pb-4 lg:grid-cols-[1fr_auto] lg:items-center">
+        <div>
+          <p className="text-sm font-semibold text-cyan-700">
+            Live workspace
           </p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-normal text-slate-950 sm:text-5xl">
+          <h2 className="mt-2 text-2xl font-semibold text-slate-950 sm:text-3xl">
             {toolCopy.title}
-          </h1>
-          <p className="mt-5 max-w-lg text-base leading-7 text-slate-600">
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
             {toolCopy.description}
           </p>
         </div>
+        <div className="flex rounded-lg bg-slate-100 p-1">
+          <button
+            className={tabClass("merge")}
+            type="button"
+            onClick={() => setActiveTool("merge")}
+          >
+            Merge PDF
+          </button>
+          <button
+            className={tabClass("split")}
+            type="button"
+            onClick={() => setActiveTool("split")}
+          >
+            Split PDF
+          </button>
+        </div>
+      </div>
 
-        <div className="rounded-[28px] border border-slate-200 bg-white p-3 shadow-[0_24px_80px_rgba(15,23,42,0.10)] sm:p-4">
-          <div className="mb-4 flex rounded-full bg-slate-100 p-1">
-            <button
-              className={tabClass("merge")}
-              type="button"
-              onClick={() => setActiveTool("merge")}
+      <div className="pt-4">
+        {activeTool === "merge" ? (
+          <>
+            <div
+              className={dropZoneClass(isMergeDragging)}
+              onClick={() => mergeInputRef.current?.click()}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setIsMergeDragging(true);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={() => setIsMergeDragging(false)}
+              onDrop={handleMergeDrop}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  mergeInputRef.current?.click();
+                }
+              }}
             >
-              Merge PDF
-            </button>
-            <button
-              className={tabClass("split")}
-              type="button"
-              onClick={() => setActiveTool("split")}
-            >
-              Split PDF
-            </button>
-          </div>
+              <input
+                ref={mergeInputRef}
+                className="sr-only"
+                type="file"
+                accept="application/pdf,.pdf"
+                multiple
+                onChange={handleMergeFileChange}
+              />
+              {renderUploadIcon()}
+              <h3 className="mt-6 text-2xl font-semibold">
+                Drag and drop PDFs here
+              </h3>
+              <p className="mt-2 text-sm text-slate-500">
+                or click to browse and select multiple files
+              </p>
+            </div>
 
-          {activeTool === "merge" ? (
-            <>
-              <div
-                className={dropZoneClass(isMergeDragging)}
-                onClick={() => mergeInputRef.current?.click()}
-                onDragEnter={(event) => {
-                  event.preventDefault();
-                  setIsMergeDragging(true);
-                }}
-                onDragOver={(event) => event.preventDefault()}
-                onDragLeave={() => setIsMergeDragging(false)}
-                onDrop={handleMergeDrop}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    mergeInputRef.current?.click();
-                  }
-                }}
-              >
-                <input
-                  ref={mergeInputRef}
-                  className="sr-only"
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  multiple
-                  onChange={handleMergeFileChange}
-                />
-                {renderUploadIcon()}
-                <h2 className="mt-6 text-2xl font-semibold tracking-normal">
-                  Drag and drop PDFs here
-                </h2>
-                <p className="mt-2 text-sm text-slate-500">
-                  or click to browse and select multiple files
-                </p>
+            <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold">Selected PDFs</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {mergeFiles.length} file
+                    {mergeFiles.length === 1 ? "" : "s"} selected
+                    {mergeFiles.length > 0
+                      ? `, ${formatFileSize(totalMergeSize)} total`
+                      : ""}
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    type="button"
+                    onClick={clearMergeFiles}
+                    disabled={mergeFiles.length === 0 || mergeStatus === "uploading"}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    className="rounded-lg bg-[#007f8a] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-cyan-700/20 transition hover:bg-[#006b73] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                    type="button"
+                    onClick={handleMerge}
+                    disabled={mergeFiles.length === 0 || mergeStatus === "uploading"}
+                  >
+                    {mergeStatus === "uploading" ? "Merging..." : "Merge PDF"}
+                  </button>
+                </div>
               </div>
 
-              <div className="mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-white">
-                <div className="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <ul className="max-h-72 overflow-y-auto p-3">
+                {mergeFiles.length === 0 ? (
+                  <li className="rounded-lg bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                    No PDFs selected yet.
+                  </li>
+                ) : (
+                  mergeFiles.map((file) =>
+                    renderFileRow(
+                      file,
+                      () => removeMergeFile(file),
+                      `Remove ${file.name}`,
+                      mergeStatus === "uploading",
+                    ),
+                  )
+                )}
+              </ul>
+
+              {mergeMessage ? (
+                <p className={messageClass(mergeStatus)} role="status">
+                  {mergeMessage}
+                </p>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <>
+            <div
+              className={dropZoneClass(isSplitDragging)}
+              onClick={() => splitInputRef.current?.click()}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setIsSplitDragging(true);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={() => setIsSplitDragging(false)}
+              onDrop={handleSplitDrop}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  splitInputRef.current?.click();
+                }
+              }}
+            >
+              <input
+                ref={splitInputRef}
+                className="sr-only"
+                type="file"
+                accept="application/pdf,.pdf"
+                onChange={handleSplitFileChange}
+              />
+              {renderUploadIcon()}
+              <h3 className="mt-6 text-2xl font-semibold">
+                Drag and drop one PDF here
+              </h3>
+              <p className="mt-2 text-sm text-slate-500">
+                or click to browse and replace the selected file
+              </p>
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="border-b border-slate-200 p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h2 className="text-lg font-semibold tracking-normal">
-                      Selected PDFs
-                    </h2>
+                    <h3 className="text-lg font-semibold">Split settings</h3>
                     <p className="mt-1 text-sm text-slate-500">
-                      {mergeFiles.length} file
-                      {mergeFiles.length === 1 ? "" : "s"} selected
-                      {mergeFiles.length > 0
-                        ? `, ${formatFileSize(totalMergeSize)} total`
-                        : ""}
+                      {splitDocument
+                        ? `${selectedSplitPages.length} of ${splitDocument.numPages} pages selected`
+                        : "Select one PDF to preview its pages."}
                     </p>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {splitDocument ? (
+                      <>
+                        <button
+                          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          type="button"
+                          onClick={selectAllSplitPages}
+                          disabled={splitStatus === "uploading"}
+                        >
+                          Select all
+                        </button>
+                        <button
+                          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          type="button"
+                          onClick={clearSelectedSplitPages}
+                          disabled={
+                            selectedSplitPages.length === 0 ||
+                            splitStatus === "uploading"
+                          }
+                        >
+                          Clear selection
+                        </button>
+                      </>
+                    ) : null}
                     <button
-                      className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       type="button"
-                      onClick={clearMergeFiles}
-                      disabled={mergeFiles.length === 0 || mergeStatus === "uploading"}
+                      onClick={clearSplitFile}
+                      disabled={!splitFile || splitStatus === "uploading"}
                     >
                       Clear
                     </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3">
+                {splitFile ? (
+                  <ul>
+                    {renderFileRow(
+                      splitFile,
+                      clearSplitFile,
+                      `Remove ${splitFile.name}`,
+                      splitStatus === "uploading",
+                    )}
+                  </ul>
+                ) : (
+                  <div className="rounded-lg bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                    No PDF selected yet.
+                  </div>
+                )}
+              </div>
+
+              {splitFile ? (
+                <div className="border-t border-slate-200 bg-[#f7faf9] p-4 sm:p-5">
+                  {isSplitPreviewLoading ? (
+                    <div className="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-sm font-medium text-slate-500">
+                      Preparing page previews...
+                    </div>
+                  ) : null}
+
+                  {splitDocument ? (
+                    <div className="grid max-h-[34rem] grid-cols-2 gap-4 overflow-y-auto pr-1 sm:grid-cols-3 xl:grid-cols-4">
+                      {Array.from(
+                        { length: splitDocument.numPages },
+                        (_, index) => index + 1,
+                      ).map((pageNumber) => (
+                        <PdfPageThumbnail
+                          key={`${splitFile.name}-${splitFile.lastModified}-${pageNumber}`}
+                          disabled={splitStatus === "uploading"}
+                          isSelected={selectedSplitPages.includes(pageNumber)}
+                          onToggle={() => toggleSplitPage(pageNumber)}
+                          pageNumber={pageNumber}
+                          pdfDocument={splitDocument}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900">
+                        Selected pages
+                      </p>
+                      <p className="mt-1 truncate text-sm text-slate-500">
+                        {selectedPagesText || "No pages selected"}
+                      </p>
+                    </div>
                     <button
-                      className="rounded-full bg-cyan-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-cyan-600/20 transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                      className="min-h-11 rounded-lg bg-[#007f8a] px-5 text-sm font-semibold text-white shadow-lg shadow-cyan-700/20 transition hover:bg-[#006b73] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                       type="button"
-                      onClick={handleMerge}
-                      disabled={mergeFiles.length === 0 || mergeStatus === "uploading"}
+                      onClick={handleSplit}
+                      disabled={!isSplitReady}
                     >
-                      {mergeStatus === "uploading" ? "Merging..." : "Merge PDF"}
+                      {splitStatus === "uploading" ? "Splitting..." : "Split PDF"}
                     </button>
                   </div>
                 </div>
+              ) : null}
 
-                <ul className="max-h-72 overflow-y-auto p-3">
-                  {mergeFiles.length === 0 ? (
-                    <li className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                      No PDFs selected yet.
-                    </li>
-                  ) : (
-                    mergeFiles.map((file) =>
-                      renderFileRow(
-                        file,
-                        () => removeMergeFile(file),
-                        `Remove ${file.name}`,
-                        mergeStatus === "uploading",
-                      ),
-                    )
-                  )}
-                </ul>
-
-                {mergeMessage ? (
-                  <p className={messageClass(mergeStatus)} role="status">
-                    {mergeMessage}
-                  </p>
-                ) : null}
-              </div>
-            </>
-          ) : (
-            <>
-              <div
-                className={dropZoneClass(isSplitDragging)}
-                onClick={() => splitInputRef.current?.click()}
-                onDragEnter={(event) => {
-                  event.preventDefault();
-                  setIsSplitDragging(true);
-                }}
-                onDragOver={(event) => event.preventDefault()}
-                onDragLeave={() => setIsSplitDragging(false)}
-                onDrop={handleSplitDrop}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    splitInputRef.current?.click();
-                  }
-                }}
-              >
-                <input
-                  ref={splitInputRef}
-                  className="sr-only"
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  onChange={handleSplitFileChange}
-                />
-                {renderUploadIcon()}
-                <h2 className="mt-6 text-2xl font-semibold tracking-normal">
-                  Drag and drop one PDF here
-                </h2>
-                <p className="mt-2 text-sm text-slate-500">
-                  or click to browse and replace the selected file
+              {splitMessage ? (
+                <p className={messageClass(splitStatus)} role="status">
+                  {splitMessage}
                 </p>
+              ) : null}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <main className="min-h-screen bg-[#f8faf9] text-slate-950">
+      <section className="relative isolate overflow-hidden border-b border-slate-200 bg-[#eef4f2]">
+        <img
+          className="absolute inset-0 -z-10 h-full w-full object-cover object-center"
+          src={heroImage}
+          alt=""
+          aria-hidden="true"
+        />
+        <div className="absolute inset-0 -z-10 bg-white/72" />
+
+        <header className="mx-auto flex max-w-7xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8">
+          <a className="flex items-center gap-3 text-sm font-bold text-slate-950" href="#">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#192126] text-white">
+              FC
+            </span>
+            FileConvy
+          </a>
+          <nav className="hidden items-center gap-6 text-sm font-medium text-slate-600 sm:flex">
+            <a className="transition hover:text-slate-950" href="#workspace">
+              Workspace
+            </a>
+            <a className="transition hover:text-slate-950" href="#workflow">
+              Workflow
+            </a>
+            <a
+              className="rounded-lg bg-[#192126] px-4 py-2 font-semibold text-white transition hover:bg-[#2a363c]"
+              href="#workspace"
+            >
+              Start converting
+            </a>
+          </nav>
+        </header>
+
+        <div className="mx-auto flex min-h-[72vh] max-w-7xl items-center px-4 pb-16 pt-10 sm:min-h-[76vh] sm:px-6 lg:px-8">
+          <div className="max-w-3xl">
+            <p className="text-sm font-semibold text-[#007f8a]">
+              PDF tools for focused document work
+            </p>
+            <h1 className="mt-5 text-5xl font-semibold leading-[1.02] text-slate-950 sm:text-6xl lg:text-7xl">
+              FileConvy
+            </h1>
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-700 sm:text-xl">
+              A polished workspace for merging messy PDF batches and splitting long documents into exactly the pages you need.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <a
+                className="inline-flex min-h-12 items-center justify-center rounded-lg bg-[#007f8a] px-6 text-sm font-semibold text-white shadow-lg shadow-cyan-700/20 transition hover:bg-[#006b73]"
+                href="#workspace"
+              >
+                Open workspace
+              </a>
+              <a
+                className="inline-flex min-h-12 items-center justify-center rounded-lg border border-slate-300 bg-white/80 px-6 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-white"
+                href="#workflow"
+              >
+                See workflow
+              </a>
+            </div>
+            <dl className="mt-10 grid max-w-2xl grid-cols-3 gap-3">
+              <div className="border-l border-slate-300 pl-4">
+                <dt className="text-xs font-medium text-slate-500">Modes</dt>
+                <dd className="mt-1 text-2xl font-semibold text-slate-950">2</dd>
               </div>
-
-              <div className="mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-white">
-                <div className="border-b border-slate-200 p-5">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h2 className="text-lg font-semibold tracking-normal">
-                        Split settings
-                      </h2>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {splitDocument
-                          ? `${selectedSplitPages.length} of ${splitDocument.numPages} pages selected`
-                          : "Select one PDF to preview its pages."}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      {splitDocument ? (
-                        <>
-                          <button
-                            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            type="button"
-                            onClick={selectAllSplitPages}
-                            disabled={splitStatus === "uploading"}
-                          >
-                            Select all
-                          </button>
-                          <button
-                            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            type="button"
-                            onClick={clearSelectedSplitPages}
-                            disabled={
-                              selectedSplitPages.length === 0 ||
-                              splitStatus === "uploading"
-                            }
-                          >
-                            Clear selection
-                          </button>
-                        </>
-                      ) : null}
-                      <button
-                        className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        type="button"
-                        onClick={clearSplitFile}
-                        disabled={!splitFile || splitStatus === "uploading"}
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-3">
-                  {splitFile ? (
-                    <ul>
-                      {renderFileRow(
-                        splitFile,
-                        clearSplitFile,
-                        `Remove ${splitFile.name}`,
-                        splitStatus === "uploading",
-                      )}
-                    </ul>
-                  ) : (
-                    <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                      No PDF selected yet.
-                    </div>
-                  )}
-                </div>
-
-                {splitFile ? (
-                  <div className="border-t border-slate-200 bg-slate-50/60 p-4 sm:p-5">
-                    {isSplitPreviewLoading ? (
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-sm font-medium text-slate-500">
-                        Preparing page previews...
-                      </div>
-                    ) : null}
-
-                    {splitDocument ? (
-                      <div className="grid max-h-[34rem] grid-cols-2 gap-4 overflow-y-auto pr-1 sm:grid-cols-3 xl:grid-cols-4">
-                        {Array.from(
-                          { length: splitDocument.numPages },
-                          (_, index) => index + 1,
-                        ).map((pageNumber) => (
-                          <PdfPageThumbnail
-                            key={`${splitFile.name}-${splitFile.lastModified}-${pageNumber}`}
-                            disabled={splitStatus === "uploading"}
-                            isSelected={selectedSplitPages.includes(pageNumber)}
-                            onToggle={() => toggleSplitPage(pageNumber)}
-                            pageNumber={pageNumber}
-                            pdfDocument={splitDocument}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-
-                    <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-900">
-                          Selected pages
-                        </p>
-                        <p className="mt-1 truncate text-sm text-slate-500">
-                          {selectedPagesText || "No pages selected"}
-                        </p>
-                      </div>
-                      <button
-                        className="min-h-11 rounded-full bg-cyan-600 px-5 text-sm font-semibold text-white shadow-lg shadow-cyan-600/20 transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
-                        type="button"
-                        onClick={handleSplit}
-                        disabled={!isSplitReady}
-                      >
-                        {splitStatus === "uploading" ? "Splitting..." : "Split PDF"}
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-
-                {splitMessage ? (
-                  <p className={messageClass(splitStatus)} role="status">
-                    {splitMessage}
-                  </p>
-                ) : null}
+              <div className="border-l border-slate-300 pl-4">
+                <dt className="text-xs font-medium text-slate-500">Preview</dt>
+                <dd className="mt-1 text-2xl font-semibold text-slate-950">Pages</dd>
               </div>
-            </>
-          )}
+              <div className="border-l border-slate-300 pl-4">
+                <dt className="text-xs font-medium text-slate-500">Output</dt>
+                <dd className="mt-1 text-2xl font-semibold text-slate-950">PDF</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <section id="workspace" className="px-4 py-12 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-6xl">
+          {renderToolPanel()}
+        </div>
+      </section>
+
+      <section id="workflow" className="border-t border-slate-200 bg-white px-4 py-16 sm:px-6 lg:px-8">
+        <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+          <div>
+            <p className="text-sm font-semibold text-[#d94b3f]">Simple by design</p>
+            <h2 className="mt-3 text-3xl font-semibold text-slate-950 sm:text-4xl">
+              Built for the small PDF jobs that should not become chores.
+            </h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {[
+              ["Drop", "Add PDFs directly into the active tool."],
+              ["Review", "Check file order, size, and selected pages."],
+              ["Download", "Run the local service and receive the finished file."],
+            ].map(([title, description]) => (
+              <article
+                className="rounded-lg border border-slate-200 bg-[#f8faf9] p-5"
+                key={title}
+              >
+                <h3 className="text-base font-semibold text-slate-950">{title}</h3>
+                <p className="mt-3 text-sm leading-6 text-slate-600">
+                  {description}
+                </p>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
     </main>
