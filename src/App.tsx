@@ -8,12 +8,15 @@ import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 const MERGE_ENDPOINT = "http://localhost:8080/api/pdf/merge";
 const SPLIT_ENDPOINT = "http://localhost:8080/api/pdf/split";
 const COMPRESS_ENDPOINT = "http://localhost:8080/api/pdf/compress";
+const CONVERT_ENDPOINT = "http://localhost:8080/api/pdf/convert";
+const CONVERT_ACCEPT = ".png,.jpg,.jpeg,.docx,.pptx,.xlsx";
+const CONVERT_EXTENSIONS = new Set(["png", "jpg", "jpeg", "docx", "pptx", "xlsx"]);
 const THUMBNAIL_WIDTH = 180;
 
 GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
 type UploadStatus = "idle" | "uploading" | "success" | "error";
-type ActiveTool = "merge" | "split" | "compress";
+type ActiveTool = "merge" | "split" | "compress" | "convert";
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) {
@@ -68,6 +71,14 @@ async function downloadResponseFile(response: Response, fallbackName: string) {
 
 function isPDF(file: File) {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
+
+function getFileExtension(fileName: string) {
+  return fileName.split(".").pop()?.toLowerCase() ?? "";
+}
+
+function isConvertibleFile(file: File) {
+  return CONVERT_EXTENSIONS.has(getFileExtension(file.name));
 }
 
 type PdfPageThumbnailProps = {
@@ -227,6 +238,12 @@ function App() {
   const [compressStatus, setCompressStatus] = useState<UploadStatus>("idle");
   const [compressMessage, setCompressMessage] = useState("");
   const compressInputRef = useRef<HTMLInputElement>(null);
+
+  const [convertFile, setConvertFile] = useState<File | null>(null);
+  const [isConvertDragging, setIsConvertDragging] = useState(false);
+  const [convertStatus, setConvertStatus] = useState<UploadStatus>("idle");
+  const [convertMessage, setConvertMessage] = useState("");
+  const convertInputRef = useRef<HTMLInputElement>(null);
 
   const totalMergeSize = useMemo(
     () => mergeFiles.reduce((sum, file) => sum + file.size, 0),
@@ -572,6 +589,85 @@ function App() {
     }
   };
 
+  const addConvertFile = (incomingFiles: FileList | File[]) => {
+    const sourceFile = Array.from(incomingFiles).find(isConvertibleFile);
+
+    if (!sourceFile) {
+      setConvertStatus("error");
+      setConvertMessage("Choose a PNG, JPG, DOCX, PPTX, or XLSX file.");
+      return;
+    }
+
+    setConvertFile(sourceFile);
+    setConvertStatus("idle");
+    setConvertMessage("");
+  };
+
+  const handleConvertFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      addConvertFile(event.target.files);
+      event.target.value = "";
+    }
+  };
+
+  const handleConvertDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsConvertDragging(false);
+
+    if (convertStatus === "uploading") {
+      return;
+    }
+
+    addConvertFile(event.dataTransfer.files);
+  };
+
+  const clearConvertFile = () => {
+    setConvertFile(null);
+    setConvertStatus("idle");
+    setConvertMessage("");
+  };
+
+  const handleConvert = async () => {
+    if (!convertFile || convertStatus === "uploading") {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", convertFile);
+
+    setConvertStatus("uploading");
+    setConvertMessage("Converting file to PDF...");
+
+    try {
+      const response = await fetch(CONVERT_ENDPOINT, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          await getResponseError(
+            response,
+            `Convert failed with status ${response.status}`,
+          ),
+        );
+      }
+
+      const fallbackName = convertFile.name.replace(/\.[^.]+$/, ".pdf");
+      await downloadResponseFile(response, fallbackName || "converted.pdf");
+
+      setConvertStatus("success");
+      setConvertMessage("Converted PDF downloaded.");
+    } catch (error) {
+      setConvertStatus("error");
+      setConvertMessage(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while converting the file.",
+      );
+    }
+  };
+
   const toolCopy =
     activeTool === "merge"
       ? {
@@ -585,11 +681,17 @@ function App() {
             description:
               "Preview every page, select the exact range, and download a focused file.",
           }
-        : {
-            title: "Compress PDFs into lighter files",
-            description:
-              "Upload one PDF, send it to the compression service, and get a smaller copy automatically.",
-          };
+        : activeTool === "compress"
+          ? {
+              title: "Compress PDFs into lighter files",
+              description:
+                "Upload one PDF, send it to the compression service, and get a smaller copy automatically.",
+            }
+          : {
+              title: "Convert source files into PDFs",
+              description:
+                "Upload an image or Office document, wait through the conversion, and download a polished PDF.",
+            };
 
   const isSplitReady =
     Boolean(splitFile) &&
@@ -681,13 +783,14 @@ function App() {
     onRemove: () => void,
     removeLabel: string,
     disabled: boolean,
+    badgeLabel = "PDF",
   ) => (
     <li
       className="flex items-center gap-3 rounded-lg px-3 py-3 transition hover:bg-slate-50"
       key={`${file.name}-${file.size}-${file.lastModified}`}
     >
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#fff0ed] text-sm font-bold text-[#d94b3f]">
-        PDF
+        {badgeLabel}
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-slate-900">{file.name}</p>
@@ -719,7 +822,7 @@ function App() {
             {toolCopy.description}
           </p>
         </div>
-        <div className="flex rounded-lg bg-slate-100 p-1">
+        <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 sm:flex">
           <button
             className={tabClass("merge")}
             type="button"
@@ -740,6 +843,13 @@ function App() {
             onClick={() => setActiveTool("compress")}
           >
             Compress
+          </button>
+          <button
+            className={tabClass("convert")}
+            type="button"
+            onClick={() => setActiveTool("convert")}
+          >
+            Convert
           </button>
         </div>
       </div>
@@ -994,7 +1104,7 @@ function App() {
               ) : null}
             </div>
           </>
-        ) : (
+        ) : activeTool === "compress" ? (
           <>
             <div
               className={dropZoneClass(isCompressDragging)}
@@ -1110,6 +1220,128 @@ function App() {
               ) : null}
             </div>
           </>
+        ) : (
+          <>
+            <div
+              className={dropZoneClass(isConvertDragging)}
+              onClick={() => {
+                if (convertStatus !== "uploading") {
+                  convertInputRef.current?.click();
+                }
+              }}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setIsConvertDragging(true);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={() => setIsConvertDragging(false)}
+              onDrop={handleConvertDrop}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  if (convertStatus !== "uploading") {
+                    convertInputRef.current?.click();
+                  }
+                }
+              }}
+            >
+              <input
+                ref={convertInputRef}
+                className="sr-only"
+                type="file"
+                accept={CONVERT_ACCEPT}
+                onChange={handleConvertFileChange}
+                disabled={convertStatus === "uploading"}
+              />
+              {renderUploadIcon()}
+              <h3 className="mt-6 text-2xl font-semibold">
+                Drag and drop a source file here
+              </h3>
+              <p className="mt-2 text-sm text-slate-500">
+                Accepts PNG, JPG, DOCX, PPTX, and XLSX files
+              </p>
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold">Conversion queue</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {convertFile
+                      ? `${convertFile.name} - ${getFileExtension(convertFile.name).toUpperCase()}`
+                      : "Select one source file to convert into PDF."}
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    type="button"
+                    onClick={clearConvertFile}
+                    disabled={!convertFile || convertStatus === "uploading"}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#007f8a] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-cyan-700/20 transition hover:bg-[#006b73] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                    type="button"
+                    onClick={handleConvert}
+                    disabled={!convertFile || convertStatus === "uploading"}
+                  >
+                    {convertStatus === "uploading" ? (
+                      <>
+                        {renderSpinnerIcon()}
+                        Converting...
+                      </>
+                    ) : (
+                      "Convert"
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3">
+                {convertFile ? (
+                  <ul>
+                    {renderFileRow(
+                      convertFile,
+                      clearConvertFile,
+                      `Remove ${convertFile.name}`,
+                      convertStatus === "uploading",
+                      getFileExtension(convertFile.name).toUpperCase(),
+                    )}
+                  </ul>
+                ) : (
+                  <div className="rounded-lg bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                    No source file selected yet.
+                  </div>
+                )}
+              </div>
+
+              {convertStatus === "uploading" ? (
+                <div className="border-t border-slate-200 bg-[#f7faf9] px-5 py-5">
+                  <div className="rounded-lg border border-cyan-100 bg-white p-4">
+                    <div className="flex items-center gap-3 text-sm font-medium text-slate-700">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-50 text-[#007f8a]">
+                        {renderSpinnerIcon()}
+                      </span>
+                      Converting your file to PDF. Office files may take a few seconds.
+                    </div>
+                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full w-1/2 animate-pulse rounded-full bg-[#007f8a]" />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {convertMessage ? (
+                <p className={messageClass(convertStatus)} role="status">
+                  {convertMessage}
+                </p>
+              ) : null}
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -1158,7 +1390,7 @@ function App() {
               FileConvy
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-700 sm:text-xl">
-              A polished workspace for merging messy PDF batches, splitting long documents, and compressing heavy files into lighter downloads.
+              A polished workspace for merging PDF batches, splitting long documents, compressing heavy files, and converting images or Office documents into PDFs.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
@@ -1177,11 +1409,11 @@ function App() {
             <dl className="mt-10 grid max-w-2xl grid-cols-3 gap-3">
               <div className="border-l border-slate-300 pl-4">
                 <dt className="text-xs font-medium text-slate-500">Modes</dt>
-                <dd className="mt-1 text-2xl font-semibold text-slate-950">3</dd>
+                <dd className="mt-1 text-2xl font-semibold text-slate-950">4</dd>
               </div>
               <div className="border-l border-slate-300 pl-4">
-                <dt className="text-xs font-medium text-slate-500">Preview</dt>
-                <dd className="mt-1 text-2xl font-semibold text-slate-950">Pages</dd>
+                <dt className="text-xs font-medium text-slate-500">Inputs</dt>
+                <dd className="mt-1 text-2xl font-semibold text-slate-950">6</dd>
               </div>
               <div className="border-l border-slate-300 pl-4">
                 <dt className="text-xs font-medium text-slate-500">Output</dt>
@@ -1209,7 +1441,7 @@ function App() {
           <div className="grid gap-4 sm:grid-cols-3">
             {[
               ["Drop", "Add PDFs directly into the active tool."],
-              ["Review", "Check file order, size, selected pages, or compression queue."],
+              ["Review", "Check file order, size, selected pages, compression queue, or source type."],
               ["Download", "Run the local service and receive the finished file."],
             ].map(([title, description]) => (
               <article
